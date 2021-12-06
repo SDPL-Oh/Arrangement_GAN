@@ -1,9 +1,12 @@
+import os
 from utils import (HouseGan, GenerateImage, GenerateTfrecord)
+
+here = os.path.dirname(os.path.abspath(__file__))
 
 HParams = {
     'num_class': 10,
     'latent': 32,
-    'batch': 1,
+    'batch': 2,
     'img_size': [299, 299],
     'num_variations': None,
     'epochs': 10,

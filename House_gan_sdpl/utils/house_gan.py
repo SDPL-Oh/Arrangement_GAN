@@ -112,12 +112,14 @@ class HouseGan:
             return fact
         return np.int64(factorial(n) / (factorial(r) * factorial(n - r)))
 
-    def baseGraphsNp(self, node, is_target=False):
-        if not is_target:
+    def baseGraphsNp(self, node, purpose):
+        if purpose == 'inputs':
             nodes = np.zeros([node, 2 + self.num_class + self.latent], np.float32)
             nodes[:, 2+self.num_class:] = np.random.normal(size=(node, self.latent))
-        else:
+        elif purpose == 'target':
             nodes = np.zeros([node, 4 + self.num_class], np.float32)
+        else:
+            nodes = np.zeros([node, 2 + self.num_class], np.float32)
         edges = np.zeros([np.multiply(self.getCombination(node, 2), 2), 1], np.float32)
         senders, receivers = [], []
         nodes_list = np.linspace(0, node-1, node).astype(int)
@@ -133,21 +135,46 @@ class HouseGan:
             "senders": senders
         }
 
-    def graphTuple(self, nodes, is_target=False):
+    def baseGraphsTf(self, node, purpose):
+        if purpose == 'inputs':
+            nodes = tf.zeros([node, 2 + self.num_class + self.latent], tf.float32)
+            nodes[:, 2 + self.num_class:] = tf.random.normal([node, self.latent])
+        elif purpose == 'target':
+            nodes = tf.zeros([node, 4 + self.num_class])
+        else:
+            nodes = tf.zeros([node, 2 + self.num_class])
+        edges = tf.zeros([tf.multiply(self.getCombination(node, 2), 2), 1], tf.float32)
+        senders, receivers = [], []
+        nodes_list = tf.linspace(0, node-1, node).astype(int)
+        for send in nodes_list:
+            for receive in np.delete(nodes_list, send):
+                senders.append(send)
+                receivers.append(receive)
+        senders = tf.constant([0, node - 1])
+        receivers = tf.constant([node - 1, 0])
+        return {
+            "globals": [0.],
+            "nodes": nodes,
+            "edges": edges,
+            "receivers": receivers,
+            "senders": senders
+        }
+
+    def graphTuple(self, nodes, purpose):
         batches_graph = []
         for node in nodes:
-            init = self.baseGraphsNp(len(node), is_target)
-            init['nodes'][:, :node.shape[1]] = node
+            init = self.baseGraphsNp(len(node), purpose)
+            if purpose == 'outputs':
+                init['nodes'] = node
+            else:
+                init['nodes'][:, :node.shape[1]] = node
             batches_graph.append(init)
         input_tuple = utils_tf.data_dicts_to_graphs_tuple(batches_graph)
         return input_tuple
 
-    # TODO: node의 feature 수에 따라 달라지는 변수를 수정할 것
     def generateGraph(self, input_op, output_ops):
         generate_ops = [
-            self.graphTuple(
-                tf.concat([output_op.nodes, input_op.nodes[:, :12]], axis=-1), True
-            ) for output_op in output_ops]
+            tf.concat([output_op.nodes, input_op.nodes[:, :12]], axis=-1) for output_op in output_ops]
         return tf.stack(generate_ops)
 
     def singleLoss(self, target_op, output_ops):
@@ -162,7 +189,7 @@ class HouseGan:
         return tf.math.reduce_sum(per_example_loss) / self.num_process
 
     def initSpec(self):
-        init = utils_tf.data_dicts_to_graphs_tuple([self.baseGraphsNp()])
+        init = utils_tf.data_dicts_to_graphs_tuple([self.baseGraphsNp])
         return utils_tf.specs_from_graphs_tuple(init)
 
     def generatorLoss(self, fake_output):
@@ -179,9 +206,13 @@ class HouseGan:
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
             generated_output = self.generator(x, self.num_process)
             generated_graph = self.generateGraph(x, generated_output)
-            print(generated_graph)
 
-            # real_output = self.discriminator(y, 1)
+            # TODO: 그래프 출력을 다시 그래프 입력 형태로 변환해야함.
+            #   Tensor 를 Numpy 형태로 맞추기 위한 작업이 필요
+            print(self.graphTuple(generated_graph, 'outputs'))
+
+            real_output = self.discriminator(y, 1)
+            print(real_output)
             # fake_output = self.discriminator(generated_graph, 1)
 
             # gen_loss = self.generatorLoss(fake_output)
@@ -238,8 +269,8 @@ class HouseGan:
                 ############# training step ##############
                 checkpoint.step.assign_add(1)
 
-                input_tuple = self.graphTuple(inputs, False)
-                target_tuple = self.graphTuple(outputs, True)
+                input_tuple = self.graphTuple(inputs, 'inputs')
+                target_tuple = self.graphTuple(outputs, 'target')
                 self.train_step(input_tuple, target_tuple)
 
                 # if step % 200 == 0:
