@@ -4,15 +4,19 @@ from House_gan_sdpl.utils import (HouseGan)
 here = os.path.dirname(os.path.abspath(__file__))
 
 HParams = {
+    'input_size': 2,
+    'output_size': 2,
     'num_class': 10,
     'latent': 32,
     'batch': 1,
     'img_size': [299, 299],
     'num_variations': None,
-    'epochs': 10,
+    'epochs': 1000,
     'generator_lr': 0.0001,
     'discriminator_lr': 0.0001,
     'num_process': 2,
+    'decay_steps': 20000,
+    'decay_rate': 0.96,
     'model_path': 'data/models/',
     'plt_path': 'data/models/',
     'log_path': 'data/models/',

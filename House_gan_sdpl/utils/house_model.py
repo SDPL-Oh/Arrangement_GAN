@@ -174,10 +174,10 @@ class Discriminator(snt.Module):
                global_output_size=None,
                name="Generator"):
     super(Discriminator, self).__init__(name=name)
-    self._encoder = GeneratorEncoder()
-    self._core = GeneratorCore()
-    self._second_core = GeneratorCore()
-    self._decoder = GeneratorDecoder()
+    self._encoder = DiscriminatorEncoder()
+    self._core = DiscriminatorCore()
+    self._second_core = DiscriminatorCore()
+    self._decoder = DiscriminatorDecoder()
     if edge_output_size is None:
       edge_fn = None
     else:
