@@ -62,6 +62,12 @@ class ColorPalette:
         else:
             return random.choice(self.colorMap)
 
+    def indexColor(self, class_idx):
+        if not isinstance(class_idx, int):
+            class_idx = int(class_idx)
+        return self.colorMap[class_idx]
+
+
 
 class GenerateImage:
     def __init__(self, csv_file, save_dir):

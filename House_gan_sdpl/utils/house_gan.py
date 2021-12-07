@@ -1,7 +1,8 @@
 from graph_nets import utils_tf
-from House_gan_sdpl.utils import (Generator, Discriminator)
+from House_gan_sdpl.utils import (Generator, Discriminator, ColorPalette)
 
 import os
+import cv2
 import numpy as np
 import sonnet as snt
 import pandas as pd
@@ -97,6 +98,7 @@ class HouseGan:
         self.train_data = hparams['train_data']
         self.test_data = hparams['test_data']
 
+        self.color_map = ColorPalette()
         self.cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
         self.lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
             self.generator_lr,
@@ -232,25 +234,43 @@ class HouseGan:
     def test_step(self, x, y):
         generated_graph = self.generator(x, self.num_process)
 
-    # @tf.function(input_signature=[init_spec()])
-    # def predict_step(self, x):
-    #     return self.generator(x, self.num_process)
+    @tf.function
+    def predict_step(self, x):
+        return self.generator(x, self.num_process)
     #
     # @tf.function
     # def valid_step(self, x, y):
     #     return average_loss(y, x)
 
-    # def plot_step(self, x, y, filename, path, x_offset):
-    #     x = pd.DataFrame(np.array(x[-1].nodes))
-    #     y = pd.DataFrame(np.array(y.nodes))
-    #     plt.figure()
-    #     plt.axis([0, 1, -0.5, 0.5])
-    #     plt.plot(x_offset[0], x[0], linewidth=1, c='r', label='Predict')
-    #     plt.plot(x_offset[0], y[0], linewidth=1, c='b', label='Original')
-    #     plt.legend()
-    #     plt.savefig(plt_path + '{}/{}.png'.format(path, os.path.splitext(np.array(filename)[0].decode())[0]))
-    #     plt.close()
-    #     x.to_csv(plt_path + '{}/{}.csv'.format(path, os.path.splitext(np.array(filename)[0].decode())[0]))
+    def plotStep(self, inputs, outputs, height, width, filename):
+        loss_ops = [self.spacePlot(input, output.nodes, height, width, filename)
+                    for input, output in zip(tf.split(inputs.nodes, self.batch, axis=1), outputs)]
+        return loss_ops
+
+    def getBaseImg(self, img_size):
+        r = np.full((*img_size, 1), 255, np.uint8)
+        g = np.full((*img_size, 1), 255, np.uint8)
+        b = np.full((*img_size, 1), 255, np.uint8)
+        return np.concatenate((r, g, b), axis=2)
+
+    def spacePlot(self, batch_input, batch_output, height, width, filename, text=False):
+        img = self.getBaseImg([height, width])
+        i = pd.DataFrame(np.array(batch_input[:, :2]), columns=['h', 'w'])
+        c = pd.DataFrame(tf.argmax(np.array(batch_input[:, 2:12]), axis=1), columns=['c'])
+        o = pd.DataFrame(np.array(batch_output[:, :]), columns=['x', 'y'])
+        output = pd.concat([o, c, i], axis=1, ignore_index=True)
+        for _, room in output.iterrows():
+            room[0] = 0 if room[0] < 0 else room[0]
+            room[1] = 0 if room[1] < 0 else room[1]
+            cv2.rectangle(
+                img, (int(room[0]), int(room[1])),
+                (int(room[0]+(room[4]*width)), int(room[1]+(room[3]*height))),
+                self.color_map.indexColor(room[2]), -1)
+            if text:
+                cv2.putText(
+                    img, room[2], (room[0], room[1] - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.color_map.indexColor(room[2]), 2)
+        cv2.imwrite(os.path.join(self.plt_path, filename), img)
 
     def training(self):
         next_batch = load_tfrecord()
@@ -263,7 +283,7 @@ class HouseGan:
             print("Initializing from scratch.")
 
         train_dataset = next_batch.getDataset(self.train_data, self.batch, True)
-        # test_dataset = next_batch.get_dataset(self.test_data, 1)
+        # test_dataset = next_batch.getDataset(self.test_data, 1, False)
         # space_height, space_width, filename, inputs, outputs = next(iter(train_dataset))
 
         for epoch in range(self.epochs):
@@ -272,27 +292,29 @@ class HouseGan:
                 step_pre_batch = len(filename)
                 ############# training step ##############
                 checkpoint.step.assign_add(1)
-
                 input_tuple = self.graphTuple(inputs, 'inputs')
                 target_tuple = self.graphTuple(outputs, 'target')
                 gen_loss, disc_loss = self.train_step(input_tuple, target_tuple)
-
                 if step % 200 == 0:
                     print("Training loss (for %d batch) at step %d: %.8f, %.8f"
                           % (int(step_pre_batch), step, float(gen_loss), float(disc_loss)),
                           "samples: {}".format(filename[-1]),
                           "lr_rate: {:0.6f}".format(self.generator_opt._decayed_lr(tf.float32).numpy()))
 
-        #         if int(step) % 1000 == 0:
-        #             ############# save validatoin plot image #############
-        #             edges_arrange_val, val_xy_val, filename_val, x_offset = next(iter(test_dataset))
-        #             val_input_tuple, val_target_tuple = self.graphTuple(edges_arrange_val,
-        #                                                                val_xy_val, 1)
-        #             pre = self.predict_step(val_input_tuple)
-        #             # plot_step(pre, val_target_tuple, filename_val, 'test', x_offset)
-        #             ############# save checkpoint ##############
-        #             save_path = manager.save()
-        #             print("Saved checkpoint for step {}: {}".format(int(checkpoint.step), save_path))
+                if int(step) % 1000 == 0:
+                    ############# save validatoin plot image #############
+                    space_height, space_width, filename, inputs, outputs = next(iter(train_dataset))
+                    input_tuple = self.graphTuple(inputs, 'inputs')
+                    generated_output = self.predict_step(input_tuple)
+                    self.plotStep(
+                        input_tuple,
+                        generated_output,
+                        np.array(space_height, dtype=np.int16)[0],
+                        np.array(space_width, dtype=np.int16)[0], np.array(filename)[0].decode())
+
+                    ############# save checkpoint ##############
+                    save_path = manager.save()
+                    print("Saved checkpoint for step {}: {}".format(int(checkpoint.step), save_path))
         #
         #         if int(step) % 10000 == 0:
         #             ############# save model ##############
