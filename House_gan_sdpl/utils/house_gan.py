@@ -253,7 +253,8 @@ class HouseGan:
                 self.color_map.indexColor(room[2]), -1)
             if text:
                 cv2.putText(
-                    img, room[2], (room[0], room[1] - 10),
+                    img, self.color_map.classToStr(room[2]),
+                    (int(room[0]), int(room[1]) - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.color_map.indexColor(room[2]), 2)
         cv2.imwrite(os.path.join(self.plt_path, filename), img)
 

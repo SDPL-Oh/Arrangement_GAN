@@ -51,6 +51,8 @@ class ColorPalette:
         return idx_num
 
     def classToStr(self, row_label):
+        if not isinstance(row_label, int):
+            row_label = int(row_label)
         if row_label > len(self.classMap):
             return 'Other'
         else:
