@@ -1,5 +1,5 @@
 import os
-from House_gan_sdpl.utils import (HouseGan)
+from House_gan_sdpl.utils import (GenerateTfrecord, HouseGan)
 
 here = os.path.dirname(os.path.abspath(__file__))
 
@@ -31,10 +31,10 @@ def main():
     #     save_dir='F:/PersonalProject/Gangsoo/data/'
     # )
     # a.generateImg()
-    ################### Tfrecord 생성 명령 ###################
+    ################## Tfrecord 생성 명령 ###################
     # house_data = GenerateTfrecord(
-    #     csv_file='F:/PersonalProject/Gangsoo/rooms.CSV',
-    #     save_dir='F:/PersonalProject/Gangsoo/data/')
+    #     csv_file='data/rooms_data.CSV',
+    #     save_dir='data/')
     # house_data.createTfrecord('train')
 
     ################### 학습 명령 ###################

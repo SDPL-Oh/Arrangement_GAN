@@ -65,17 +65,6 @@ class load_tfrecord:
         dataset = dataset.batch(batch_size).repeat(3)
         return dataset
 
-    # def randomInput(self, node, num_class, height_range, width_range, batch_size):
-    #     batch_node, nodes = [], []
-    #     for batch in range(batch_size):
-    #         for idx in range(node):
-    #             height = np.random.randint(*height_range, size=1)
-    #             width = np.random.randint(*width_range, size=1)
-    #             classes_vector = tf.one_hot(indices=np.random.randint(num_class, size=1), depth=num_class, axis=-1)
-    #             nodes.append([height, width, classes_vector])
-    #         batch_node.append(nodes)
-    #     return batch_node
-
 
 class HouseGan:
     def __init__(self, hparams):
@@ -237,10 +226,6 @@ class HouseGan:
     @tf.function
     def predict_step(self, x):
         return self.generator(x, self.num_process)
-    #
-    # @tf.function
-    # def valid_step(self, x, y):
-    #     return average_loss(y, x)
 
     def plotStep(self, inputs, outputs, height, width, filename):
         loss_ops = [self.spacePlot(input, output.nodes, height, width, filename)
@@ -253,15 +238,15 @@ class HouseGan:
         b = np.full((*img_size, 1), 255, np.uint8)
         return np.concatenate((r, g, b), axis=2)
 
-    def spacePlot(self, batch_input, batch_output, height, width, filename, text=False):
+    def spacePlot(self, batch_input, batch_output, height, width, filename, text=True):
         img = self.getBaseImg([height, width])
         i = pd.DataFrame(np.array(batch_input[:, :2]), columns=['h', 'w'])
         c = pd.DataFrame(tf.argmax(np.array(batch_input[:, 2:12]), axis=1), columns=['c'])
         o = pd.DataFrame(np.array(batch_output[:, :]), columns=['x', 'y'])
         output = pd.concat([o, c, i], axis=1, ignore_index=True)
         for _, room in output.iterrows():
-            room[0] = 0 if room[0] < 0 else room[0]
-            room[1] = 0 if room[1] < 0 else room[1]
+            room[0] = 0 if room[0] < 0 else room[0]*width
+            room[1] = 0 if room[1] < 0 else room[1]*height
             cv2.rectangle(
                 img, (int(room[0]), int(room[1])),
                 (int(room[0]+(room[4]*width)), int(room[1]+(room[3]*height))),
@@ -286,6 +271,7 @@ class HouseGan:
         # test_dataset = next_batch.getDataset(self.test_data, 1, False)
         # space_height, space_width, filename, inputs, outputs = next(iter(train_dataset))
 
+        self.step = 0
         for epoch in range(self.epochs):
             print("\nStart of epoch %d" % epoch)
             for step, (space_height, space_width, filename, inputs, outputs) in enumerate(train_dataset):
@@ -300,8 +286,9 @@ class HouseGan:
                           % (int(step_pre_batch), step, float(gen_loss), float(disc_loss)),
                           "samples: {}".format(filename[-1]),
                           "lr_rate: {:0.6f}".format(self.generator_opt._decayed_lr(tf.float32).numpy()))
+                    self.step += 200
 
-                if int(step) % 1000 == 0:
+                if int(step) % 1001 == 0:
                     ############# save validatoin plot image #############
                     space_height, space_width, filename, inputs, outputs = next(iter(train_dataset))
                     input_tuple = self.graphTuple(inputs, 'inputs')
@@ -310,7 +297,8 @@ class HouseGan:
                         input_tuple,
                         generated_output,
                         np.array(space_height, dtype=np.int16)[0],
-                        np.array(space_width, dtype=np.int16)[0], np.array(filename)[0].decode())
+                        np.array(space_width, dtype=np.int16)[0],
+                        str(self.step) + '_' + np.array(filename)[0].decode())
 
                     ############# save checkpoint ##############
                     save_path = manager.save()

@@ -33,27 +33,28 @@ class ColorPalette:
                          [255, 128, 0],
                          [128, 255, 0]]
 
+        self.classMap = ['living room',
+                         'kitchen',
+                         'bedroom',
+                         'bathroom',
+                         'closet',
+                         'balcony',
+                         'corridor',
+                         'dining room',
+                         'laundry room']
+
     def classToInt(self, row_label):
-        if row_label == 'living room':
-            return 1
-        elif row_label == 'kitchen':
-            return 2
-        elif row_label == 'bedroom':
-            return 3
-        elif row_label == 'bathroom':
-            return 4
-        elif row_label == 'closet':
-            return 5
-        elif row_label == 'balcony':
-            return 6
-        elif row_label == 'corridor':
-            return 7
-        elif row_label == 'dining room':
-            return 8
-        elif row_label == 'laundry room':
-            return 9
+        idx_num = len(self.classMap) + 1
+        for idx in range(len(self.classMap)):
+            if row_label == self.classMap[idx]:
+                idx_num = idx + 1
+        return idx_num
+
+    def classToStr(self, row_label):
+        if row_label > len(self.classMap):
+            return 'Other'
         else:
-            return 10
+            return self.classMap[row_label-1]
 
     def getColor(self, classes, is_random=False):
         if not is_random:
@@ -66,7 +67,6 @@ class ColorPalette:
         if not isinstance(class_idx, int):
             class_idx = int(class_idx)
         return self.colorMap[class_idx]
-
 
 
 class GenerateImage:
@@ -132,6 +132,7 @@ class GenerateTfrecord:
         if not isinstance(values, (tuple, list)):
             values = [values]
         return tf.train.Feature(int64_list=tf.train.Int64List(value=values))
+
 
     def createTfValue(self, group):
         x, y, w, h, classes, classes_text = [], [], [], [], [], []
