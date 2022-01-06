@@ -39,7 +39,9 @@ def main():
 
     ################### 학습 명령 ###################
     house_gan = HouseGan(HParams)
-    house_gan.training()
+    # house_gan.training()
+    # house_gan.validation()
+    house_gan.test()
 
 if __name__ == '__main__':
     main()

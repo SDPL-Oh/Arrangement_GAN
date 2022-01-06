@@ -220,16 +220,18 @@ class HouseGan:
         return gen_loss, disc_loss
 
     @tf.function
-    def test_step(self, x, y):
-        generated_graph = self.generator(x, self.num_process)
-
-    @tf.function
     def predict_step(self, x):
         return self.generator(x, self.num_process)
 
     def plotStep(self, inputs, outputs, height, width, filename):
         loss_ops = [self.spacePlot(input, output.nodes, height, width, filename)
                     for input, output in zip(tf.split(inputs.nodes, self.batch, axis=1), outputs)]
+        return loss_ops
+
+    def plotTarget(self, inputs, outputs, height, width, filename):
+        loss_ops = [self.spacePlot(input, output, height, width, filename)
+                    for input, output in zip(tf.split(inputs.nodes, self.batch, axis=1),
+                                             tf.split(outputs.nodes, self.batch, axis=1))]
         return loss_ops
 
     def getBaseImg(self, img_size):
@@ -242,7 +244,27 @@ class HouseGan:
         img = self.getBaseImg([height, width])
         i = pd.DataFrame(np.array(batch_input[:, :2]), columns=['h', 'w'])
         c = pd.DataFrame(tf.argmax(np.array(batch_input[:, 2:12]), axis=1), columns=['c'])
-        o = pd.DataFrame(np.array(batch_output[:, :]), columns=['x', 'y'])
+        o = pd.DataFrame(np.array(batch_output[:, :2]), columns=['x', 'y'])
+        output = pd.concat([o, c, i], axis=1, ignore_index=True)
+        for _, room in output.iterrows():
+            room[0] = 0 if room[0] < 0 else room[0]*width
+            room[1] = 0 if room[1] < 0 else room[1]*height
+            cv2.rectangle(
+                img, (int(room[0]), int(room[1])),
+                (int(room[0]+(room[4]*width)), int(room[1]+(room[3]*height))),
+                self.color_map.indexColor(room[2]), -1)
+            if text:
+                cv2.putText(
+                    img, self.color_map.classToStr(room[2]),
+                    (int(room[0]), int(room[1]) - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.color_map.indexColor(room[2]), 2)
+        cv2.imwrite(os.path.join(self.plt_path, filename), img)
+
+    def spacePlot(self, batch_input, batch_output, height, width, filename, text=True):
+        img = self.getBaseImg([height, width])
+        i = pd.DataFrame(np.array(batch_input[:, :2]), columns=['h', 'w'])
+        c = pd.DataFrame(tf.argmax(np.array(batch_input[:, 2:12]), axis=1), columns=['c'])
+        o = pd.DataFrame(np.array(batch_output[:, :2]), columns=['x', 'y'])
         output = pd.concat([o, c, i], axis=1, ignore_index=True)
         for _, room in output.iterrows():
             room[0] = 0 if room[0] < 0 else room[0]*width
@@ -269,7 +291,6 @@ class HouseGan:
             print("Initializing from scratch.")
 
         train_dataset = next_batch.getDataset(self.train_data, self.batch, True)
-        # test_dataset = next_batch.getDataset(self.test_data, 1, False)
         # space_height, space_width, filename, inputs, outputs = next(iter(train_dataset))
 
         self.step = 0
@@ -293,7 +314,7 @@ class HouseGan:
                     ############# save validatoin plot image #############
                     space_height, space_width, filename, inputs, outputs = next(iter(train_dataset))
                     input_tuple = self.graphTuple(inputs, 'inputs')
-                    generated_output = self.predict_step(input_tuple)
+                    generated_output = self.graphTuple(outputs, 'target')
                     self.plotStep(
                         input_tuple,
                         generated_output,
@@ -304,7 +325,7 @@ class HouseGan:
                     ############# save checkpoint ##############
                     save_path = manager.save()
                     print("Saved checkpoint for step {}: {}".format(int(checkpoint.step), save_path))
-        #
+
         #         if int(step) % 10000 == 0:
         #             ############# save model ##############
         #             to_save = snt.Module()
@@ -313,23 +334,35 @@ class HouseGan:
         #             tf.saved_model.save(to_save, self.model_path)
         #             print("Saved module for step {}".format(int(step)))
 
+    def validation(self):
+        next_batch = load_tfrecord()
+        train_dataset = next_batch.getDataset(self.train_data, self.batch, True)
 
-    # def validation(self):
-    #     ############# load model ##############
-    #     val_batch_size = 1
-    #     loaded = tf.saved_model.load(model_path)
-    #     ############# dataset ##############
-    #     test_dataset = next_batch.get_dataset('dat/val_test.record', val_batch_size, is_training=False)
-    #     val_loss = 0
-    #     for step_val, (edges_arrange_val, val_xy_val, filename_val, x_offset) in enumerate(test_dataset):
-    #         step_pre_batch = len(filename_val)
-    #         ############# validation step ##############
-    #         val_input_tuple, val_target_tuple = graph_to_tuple(edges_arrange_val, val_xy_val, step_pre_batch)
-    #
-    #         pre = loaded.inference(val_input_tuple)
-    #         plot_step(pre, val_target_tuple, filename_val, 'test', x_offset)
-    #         val_loss_per = valid_step(pre, val_target_tuple)
-    #         val_loss += val_loss_per
-    #         print(val_loss_per.values)
-    #         ############## plot offset ##############
-    #     print("validation loss: %.8f" % (val_loss / (step_val + 1)))
+        for epoch in range(1):
+            print("\nStart of epoch %d" % epoch)
+            for step, (space_height, space_width, filename, inputs, outputs) in enumerate(train_dataset):
+                input_tuple = self.graphTuple(inputs, 'inputs')
+                generated_output = self.graphTuple(outputs, 'target')
+                self.plotTarget(
+                    input_tuple,
+                    generated_output,
+                    np.array(space_height, dtype=np.int16)[0],
+                    np.array(space_width, dtype=np.int16)[0],
+                    'target_' + np.array(filename)[0].decode())
+
+
+    def test(self):
+        next_batch = load_tfrecord()
+        train_dataset = next_batch.getDataset(self.test_data, self.batch, True)
+
+        for epoch in range(1):
+            print("\nStart of epoch %d" % epoch)
+            for step, (space_height, space_width, filename, inputs, _) in enumerate(train_dataset):
+                input_tuple = self.graphTuple(inputs, 'inputs')
+                generated_output = self.predict_step(input_tuple)
+                self.plotStep(
+                    input_tuple,
+                    generated_output,
+                    np.array(space_height, dtype=np.int16)[0],
+                    np.array(space_width, dtype=np.int16)[0],
+                    'generate_' + np.array(filename)[0].decode())
