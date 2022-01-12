@@ -21,7 +21,8 @@ HParams = {
     'plt_path': 'data/models/',
     'log_path': 'data/models/',
     'train_data': 'data/train.record',
-    'test_data': 'data/train.record'
+    'test_data': 'data/train.record',
+    'test_csv': 'data/room_val.csv'
 }
 
 def main():
@@ -37,11 +38,11 @@ def main():
     #     save_dir='data/')
     # house_data.createTfrecord('train')
 
-    ################### 학습 명령 ###################
+    ################### 학습/평가 명령 ###################
     house_gan = HouseGan(HParams)
     # house_gan.training()
     # house_gan.validation()
-    house_gan.test()
+    house_gan.test(os.path.join(here, HParams['test_csv']))
 
 if __name__ == '__main__':
     main()

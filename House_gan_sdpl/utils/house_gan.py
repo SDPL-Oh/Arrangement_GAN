@@ -4,15 +4,20 @@ from House_gan_sdpl.utils import (Generator, Discriminator, ColorPalette)
 import os
 import cv2
 import numpy as np
-import sonnet as snt
 import pandas as pd
-import collections
 import tensorflow as tf
+from collections import namedtuple
+
+import sonnet as snt
+import collections
 import matplotlib.pylab as plt
 
 # TODO:
 #   데이터가 1000으로 설정되어있을 때, 전체 데이터가 읽어지는지 확인 할 것
 class load_tfrecord:
+    def __init__(self):
+        self.color_map = ColorPalette()
+
     def readTfrecord(self, example):
         tfrecord_format = (
             {
@@ -65,6 +70,30 @@ class load_tfrecord:
         dataset = dataset.batch(batch_size).repeat(3)
         return dataset
 
+    def customDataset(self, csv_file):
+        dataset = []
+        rooms_info = pd.read_csv(csv_file, header=0)
+        grouped = self.splitGroup(rooms_info, ['filename', 'height', 'width'])
+        for group in grouped:
+            dataset.append(self.sparseGroup(group))
+        return dataset
+
+    def sparseGroup(self, group):
+        inputs = []
+        for _, row in group.object.iterrows():
+            inputs.append(
+               np.concatenate(
+                   ([int(row['w']) / int(group.width), int(row['h']) / int(group.height)],
+                    np.eye(10)[self.color_map.classToInt(row['class'])])
+               )
+                )
+        return group.height, group.width, group.filename, np.array(inputs)
+
+    def splitGroup(self, df, group):
+        data = namedtuple('data', group + ['object'])
+        gb = df.groupby(group)
+        return [data(filename, height, width, gb.get_group(x))
+                for (filename, height, width), x in zip(gb.groups.keys(), gb.groups)]
 
 class HouseGan:
     def __init__(self, hparams):
@@ -336,11 +365,11 @@ class HouseGan:
 
     def validation(self):
         next_batch = load_tfrecord()
-        train_dataset = next_batch.getDataset(self.train_data, self.batch, True)
+        test_dataset = next_batch.getDataset(self.train_data, self.batch, True)
 
         for epoch in range(1):
             print("\nStart of epoch %d" % epoch)
-            for step, (space_height, space_width, filename, inputs, outputs) in enumerate(train_dataset):
+            for step, (space_height, space_width, filename, inputs, outputs) in enumerate(test_dataset):
                 input_tuple = self.graphTuple(inputs, 'inputs')
                 generated_output = self.graphTuple(outputs, 'target')
                 self.plotTarget(
@@ -351,18 +380,19 @@ class HouseGan:
                     'target_' + np.array(filename)[0].decode())
 
 
-    def test(self):
+    def test(self, csv_file):
         next_batch = load_tfrecord()
-        train_dataset = next_batch.getDataset(self.test_data, self.batch, True)
+        test_dataset = next_batch.customDataset(csv_file)
+        iteration = input("출력할 횟수: ")
 
-        for epoch in range(1):
+        for epoch in range(int(iteration)):
             print("\nStart of epoch %d" % epoch)
-            for step, (space_height, space_width, filename, inputs, _) in enumerate(train_dataset):
-                input_tuple = self.graphTuple(inputs, 'inputs')
+            for step, (space_height, space_width, filename, inputs) in enumerate(test_dataset):
+                input_tuple = self.graphTuple([inputs], 'inputs')
                 generated_output = self.predict_step(input_tuple)
                 self.plotStep(
                     input_tuple,
                     generated_output,
-                    np.array(space_height, dtype=np.int16)[0],
-                    np.array(space_width, dtype=np.int16)[0],
-                    'generate_' + np.array(filename)[0].decode())
+                    np.array(space_height, dtype=np.int16),
+                    np.array(space_width, dtype=np.int16),
+                    'generate_' + filename)

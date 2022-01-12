@@ -33,15 +33,15 @@ class ColorPalette:
                          [255, 128, 0],
                          [128, 255, 0]]
 
-        self.classMap = ['living room',
+        self.classMap = ['livingroom',
                          'kitchen',
                          'bedroom',
                          'bathroom',
                          'closet',
                          'balcony',
                          'corridor',
-                         'dining room',
-                         'laundry room']
+                         'diningroom',
+                         'laundryroom']
 
     def classToInt(self, row_label):
         idx_num = len(self.classMap) + 1
